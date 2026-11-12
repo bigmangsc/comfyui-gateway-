@@ -50,7 +50,7 @@ COMFYUI_URL=http://127.0.0.1:8188
 - `NEGATIVE_PROMPT_NODE_ID` 默认 `3`，对应负面提示词 `CLIPTextEncode` 节点
 - 模型加载全部使用内置节点：`UNETLoader`（DiT）、`CLIPLoader`（type 为 `moss_image`）、`VAELoader`
 - 采样参数为官方推荐：50 步、CFG 3、euler / sgm_uniform
-- 模板不含 LoRA 节点，前端会自动禁用 LoRA 选项
+- 模板包含一个 `LoraLoader` 节点（默认加载编辑 LoRA）；不需要时在页面勾选「禁用 LoRA」
 
 需要的模型文件（放入 ComfyUI 的对应目录，可从 [Comfy-Org/MOSS-Image](https://huggingface.co/Comfy-Org/MOSS-Image) 下载）：
 
@@ -59,8 +59,9 @@ COMFYUI_URL=http://127.0.0.1:8188
 | `moss_image_sft_int8_convrot.safetensors` | `models/diffusion_models/` |
 | `qwen3.5_9b_w4a8_gptq.safetensors` | `models/text_encoders/` |
 | `flux2-vae_small.safetensors` | `models/vae/` |
+| `moss_image_edit_lora_rank_64_bf16.safetensors` | `models/loras/` |
 
-如需使用 LoRA：把 LoRA 文件放入 `models/loras/`，并在 `config/workflow.json` 中加入一个 `LoraLoader` 节点（`model` 接 `UNETLoader`、`clip` 接 `CLIPLoader`）。
+LoRA 用法：把 LoRA 文件（如 `moss_image_edit_lora_rank_64_bf16.safetensors`、`moss_image_color_depth_control.safetensors`，或其他兼容的 MOSS LoRA）放入 `models/loras/`，在页面「高级选项」里填文件名和强度即可；本次不使用则勾选「禁用 LoRA」。
 
 如果你的节点 ID 或模型不同，直接修改 `config/workflow.json` 和 `.env` 中的 `PROMPT_NODE_ID` / `NEGATIVE_PROMPT_NODE_ID`。
 

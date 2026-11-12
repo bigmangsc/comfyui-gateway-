@@ -45,7 +45,7 @@
       "scheduler": "sgm_uniform",
       "denoise": 1,
       "model": [
-        "10",
+        "15",
         0
       ],
       "positive": [
@@ -122,6 +122,25 @@
     "class_type": "VAELoader",
     "_meta": {
       "title": "VAE"
+    }
+  },
+  "15": {
+    "inputs": {
+      "lora_name": "moss_image_edit_lora_rank_64_bf16.safetensors",
+      "strength_model": 1,
+      "strength_clip": 0,
+      "model": [
+        "10",
+        0
+      ],
+      "clip": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "LoraLoader",
+    "_meta": {
+      "title": "LoRA"
     }
   }
 }
