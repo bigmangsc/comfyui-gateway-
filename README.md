@@ -192,6 +192,65 @@ curl -X POST http://127.0.0.1:19613/api/delete \
 curl http://127.0.0.1:19613/api/comfyui/status
 ```
 
+## 训练角色 LoRA（SDXL）
+
+SDXL 工作流配合自训练的「角色 LoRA」可以稳定生成同一个角色（真人或动漫）。完整流程：
+
+### 1. 准备数据集
+
+- 每个角色一个文件夹，20~100 张同角色图片（最低 10~15 张也能训，需降低 rank 并减少步数防过拟合）
+- 多角度、多光照、多背景；删掉模糊、重复、带水印、**多人入镜**、脸部过小的图
+- 想一个生僻触发词（如 `mychar01`），训练时绑定到角色上
+
+### 2. 安装训练工具
+
+使用 [OneTrainer](https://github.com/Nerogar/OneTrainer)（图形界面 + CLI 均可）。以 Windows 为例：
+
+```bash
+git clone https://github.com/Nerogar/OneTrainer
+cd OneTrainer && install.bat   # 自动建 venv 并装 CUDA 版 torch
+```
+
+### 3. 打标
+
+为每张图生成文字描述（写入同名 `.txt` 文件），触发词放到开头：
+
+```bash
+# 动漫：WD14 标签器；真人：WD14 或 BLIP
+python scripts/generate_captions.py --model WD14_VIT_2 \
+  --sample-dir <数据集目录> --caption-prefix "<触发词>, " --mode replace --device cuda
+```
+
+> 国内网络如遇 huggingface.co 证书/下载问题，可设置 `HF_ENDPOINT=https://hf-mirror.com`。
+
+### 4. 训练（SDXL 角色 LoRA 参考参数）
+
+训练配置用 OneTrainer UI 导出，核心参数建议：
+
+| 参数 | 动漫（50+ 图） | 真人（16 张小数据集） |
+| --- | --- | --- |
+| 基础模型 | Animagine XL 4.0 | RealVisXL V5.0（fp16） |
+| LoRA rank / alpha | 16 / 16 | 8 / 8 |
+| 学习率 | 1e-4 | 5e-5 |
+| epochs | 20 | 30（含 repeats×3） |
+| 分辨率 | 1024 + 比例桶 | 1024 + 比例桶 |
+| 其他 | 只训 UNet，bf16，ADAMW，latent 缓存 | 同上 + 颜色/翻转增强 |
+
+CLI 启动：
+
+```bash
+python scripts/train.py --config-path <config.json>   # 必须在 OneTrainer 根目录运行
+```
+
+每个 epoch 会在 workspace 目录生成采样图，用来观察角色成型与过拟合。
+
+### 5. 部署与使用
+
+1. 把训练出的 `xxx.safetensors` 复制到 ComfyUI 的 `models/loras/`
+2. 网关页面选择「SDXL 动漫角色」或「SDXL 真人角色」工作流
+3. 在「高级选项 → LoRA 文件名」填 `xxx.safetensors`（强度默认 1）
+4. 提示词里带上触发词，例如：`mychar01, 1girl, solo, portrait, looking at viewer`
+
 ## 数据与隐私
 
 - 所有数据只保存在本机：任务记录在 `data/app.sqlite3`，图片在 `data/jobs/<job_id>/`，日志在 `data/logs/`。
