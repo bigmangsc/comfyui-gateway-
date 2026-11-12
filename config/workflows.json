@@ -1,0 +1,21 @@
+{
+  "workflows": [
+    {
+      "id": "moss_t2i",
+      "name": "MOSS-Image 文生图",
+      "file": "config/workflows/moss_t2i.json",
+      "default": true,
+      "supports_layout": true
+    },
+    {
+      "id": "sdxl_anime",
+      "name": "SDXL 动漫角色",
+      "file": "config/workflows/sdxl_anime.json"
+    },
+    {
+      "id": "sdxl_real",
+      "name": "SDXL 真人角色",
+      "file": "config/workflows/sdxl_real.json"
+    }
+  ]
+}

@@ -7,6 +7,7 @@
 ## 功能
 
 - 本地 Web 界面：提示词 / 负面提示词 / 步数 / 种子 / 分辨率 / LoRA
+- 多工作流切换：MOSS-Image 文生图、SDXL 动漫角色、SDXL 真人角色，页面下拉一键切换
 - 支持 MOSS-Image 工作流的 layout JSON 专家模式
 - 任务队列：排队、轮询、取图、取消、删除
 - 历史任务列表：缩略图、查看大图、下载原图、复制参数重新生成
@@ -44,15 +45,17 @@ COMFYUI_URL=http://127.0.0.1:8188
 
 ### 3. 配置工作流
 
-`config/workflow.json` 默认是 **MOSS-Image 原生工作流**（ComfyUI 0.41.3+ 内置支持，无需任何自定义节点）：
+工作流模板由 `config/workflows.json` 清单管理，模板文件放在 `config/workflows/` 目录，页面下拉框可切换：
 
-- `PROMPT_NODE_ID` 默认 `2`，对应正向提示词 `CLIPTextEncode` 节点
-- `NEGATIVE_PROMPT_NODE_ID` 默认 `3`，对应负面提示词 `CLIPTextEncode` 节点
-- 模型加载全部使用内置节点：`UNETLoader`（DiT）、`CLIPLoader`（type 为 `moss_image`）、`VAELoader`
-- 采样参数为官方推荐：50 步、CFG 3、euler / sgm_uniform
-- 模板包含一个 `LoraLoader` 节点（默认加载编辑 LoRA）；不需要时在页面勾选「禁用 LoRA」
+| 工作流 ID | 说明 | 需要的模型 |
+| --- | --- | --- |
+| `moss_t2i`（默认） | MOSS-Image 文生图，原生节点（ComfyUI 0.41.3+），支持 layout JSON | 见下表 |
+| `sdxl_anime` | SDXL 动漫角色（Animagine XL 4.0），配合自训练角色 LoRA | `models/checkpoints/animagine-xl-4.0.safetensors` |
+| `sdxl_real` | SDXL 真人角色（RealVisXL V5.0），配合自训练角色 LoRA | `models/checkpoints/RealVisXL_V5.0_fp16.safetensors` |
 
-需要的模型文件（放入 ComfyUI 的对应目录，可从 [Comfy-Org/MOSS-Image](https://huggingface.co/Comfy-Org/MOSS-Image) 下载）：
+所有模板的正向提示词节点 ID 为 `2`、负面提示词节点 ID 为 `3`（在 `.env` 的 `PROMPT_NODE_ID` / `NEGATIVE_PROMPT_NODE_ID` 可改）。
+
+MOSS-Image 工作流需要的模型（放入 ComfyUI 的对应目录，可从 [Comfy-Org/MOSS-Image](https://huggingface.co/Comfy-Org/MOSS-Image) 下载）：
 
 | 文件 | 目录 |
 | --- | --- |
@@ -61,9 +64,9 @@ COMFYUI_URL=http://127.0.0.1:8188
 | `flux2-vae_small.safetensors` | `models/vae/` |
 | `moss_image_edit_lora_rank_64_bf16.safetensors` | `models/loras/` |
 
-LoRA 用法：把 LoRA 文件（如 `moss_image_edit_lora_rank_64_bf16.safetensors`、`moss_image_color_depth_control.safetensors`，或其他兼容的 MOSS LoRA）放入 `models/loras/`，在页面「高级选项」里填文件名和强度即可；本次不使用则勾选「禁用 LoRA」。
+LoRA 用法：把 LoRA 文件放入 `models/loras/`，在页面「高级选项」里填文件名和强度即可；留空则使用工作流默认 LoRA（MOSS）或本次不使用 LoRA（SDXL），勾选「禁用 LoRA」强制不使用。
 
-如果你的节点 ID 或模型不同，直接修改 `config/workflow.json` 和 `.env` 中的 `PROMPT_NODE_ID` / `NEGATIVE_PROMPT_NODE_ID`。
+如果要自定义工作流：在 `config/workflows/` 放模板 JSON、在清单里注册即可，节点 ID 与模型名按你的 ComfyUI 环境调整。
 
 ### 4. 启动
 
@@ -90,7 +93,8 @@ uvicorn app.main:app --host 127.0.0.1 --port 19613
 | `APP_HOST` | `127.0.0.1` | 监听地址；本机使用建议保持默认 |
 | `APP_PORT` | `19613` | 监听端口 |
 | `COMFYUI_URL` | `http://127.0.0.1:8188` | 本地 ComfyUI 地址 |
-| `WORKFLOW_FILE` | `config/workflow.json` | 工作流模板路径 |
+| `WORKFLOW_FILE` | `config/workflow.json` | 单工作流回退模板（无清单时使用） |
+| `WORKFLOWS_MANIFEST` | `config/workflows.json` | 多工作流清单路径 |
 | `DATABASE_FILE` | `data/app.sqlite3` | SQLite 任务记录 |
 | `JOBS_DIR` | `data/jobs` | 生成图片目录 |
 | `PROMPT_NODE_ID` | `2` | 正向提示词节点 ID |
@@ -206,13 +210,15 @@ app/
   runner.py            队列调度与 ComfyUI 轮询
   comfy.py             ComfyUI HTTP 客户端
   workflow.py          工作流模板解析与参数注入
+  workflows.py         多工作流注册表
   layout.py            MOSS-Image layout JSON 处理
   task_metadata.py     任务元数据文件
   thumbnails.py        缩略图与预览图生成
   http_cache.py        静态文件缓存响应
   static/              本地前端页面
 config/
-  workflow.json        ComfyUI 工作流模板
+  workflows.json       多工作流清单
+  workflows/           工作流模板（moss_t2i / sdxl_anime / sdxl_real）
 data/
   image-prompt-skill.md
 tools/

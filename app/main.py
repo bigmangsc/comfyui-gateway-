@@ -21,7 +21,8 @@ from .runner import JobRunner
 from .store import TaskStore, iso, utc_now
 from .task_metadata import write_task_metadata
 from .thumbnails import display_path, thumbnail_path
-from .workflow import SEED_MAX, WorkflowError, WorkflowTemplate, normalize_dimension
+from .workflow import SEED_MAX, WorkflowError, normalize_dimension
+from .workflows import WorkflowRegistry
 
 
 def configure_logging(config: Settings) -> logging.Logger:
@@ -51,18 +52,10 @@ logger = configure_logging(settings)
 
 store = TaskStore(settings.database_file)
 comfy = ComfyClient(settings.comfy_url, settings.comfy_timeout_seconds)
-workflow = WorkflowTemplate(
-    settings.workflow_file,
-    settings.prompt_node_id,
-    settings.negative_prompt_node_id,
-)
-runner = JobRunner(store, comfy, workflow, settings)
-
-try:
-    DEFAULT_LORA = workflow.default_lora_filename()
-except WorkflowError:
-    logger.exception("could not determine default LoRA from workflow")
-    DEFAULT_LORA = None
+workflows = WorkflowRegistry(settings)
+_default_entry = workflows.default_entry()
+DEFAULT_LORA = _default_entry.default_lora if _default_entry else None
+runner = JobRunner(store, comfy, workflows, settings)
 
 
 # ---------- 请求模型 ----------
@@ -70,6 +63,7 @@ except WorkflowError:
 class SubmitRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    workflow_id: str | None = Field(default=None, max_length=64)
     prompt: str = Field(default="", max_length=8000)
     layout: dict[str, Any] | None = None
     negative_prompt: str | None = Field(default=None, max_length=8000)
@@ -104,8 +98,12 @@ def _validate_text(value: str | None, max_length: int, label: str) -> str | None
 def _task_public(task: dict[str, Any]) -> dict[str, Any]:
     status = task["status"]
     has_result = status == "completed" and bool(task.get("result_path"))
+    workflow_id = task.get("workflow_id") or ""
+    workflow_entry = workflows.get(workflow_id) or workflows.default_entry()
     return {
         "job_id": task["job_id"],
+        "workflow_id": workflow_id,
+        "workflow_name": workflow_entry.name if workflow_entry else "",
         "status": status,
         "queue_position": task.get("queue_position"),
         "prompt": task.get("prompt") or "",
@@ -197,13 +195,25 @@ def comfyui_status() -> dict[str, Any]:
     return runner.comfy_status()
 
 
+@app.get("/api/workflows")
+def workflows_list() -> dict[str, Any]:
+    return {
+        "items": workflows.list_public(),
+        "default_id": workflows.default_id,
+    }
+
+
 @app.get("/api/workflow/info")
 def workflow_info() -> dict[str, Any]:
+    entry = workflows.default_entry()
     return {
         "comfy_url": settings.comfy_url,
-        "default_lora": DEFAULT_LORA,
-        "workflow_file": str(settings.workflow_file),
+        "workflow_id": entry.id if entry else None,
+        "workflow_name": entry.name if entry else None,
+        "default_lora": entry.default_lora if entry else None,
+        "workflow_file": str(entry.file) if entry else str(settings.workflow_file),
         "result_ttl_hours": settings.result_ttl_hours,
+        "workflows": workflows.list_public(),
     }
 
 
@@ -216,8 +226,20 @@ def list_tasks(limit: int = 100) -> dict[str, Any]:
 
 @app.post("/api/submit")
 def submit(payload: SubmitRequest) -> dict[str, Any]:
+    if payload.workflow_id and payload.workflow_id not in workflows.entries:
+        raise HTTPException(
+            status_code=422, detail=f"工作流不存在: {payload.workflow_id}"
+        )
+    entry = workflows.get(payload.workflow_id)
+    if entry is None:
+        raise HTTPException(status_code=422, detail="没有可用的工作流模板")
+    workflow_id = entry.id
     try:
         if payload.layout is not None:
+            if not entry.supports_layout:
+                raise LayoutError(
+                    f"工作流「{entry.name}」不支持 layout JSON 模式"
+                )
             if payload.prompt.strip():
                 raise LayoutError(
                     "专家模式使用 layout JSON 时不能再填写正向提示词"
@@ -258,6 +280,7 @@ def submit(payload: SubmitRequest) -> dict[str, Any]:
     expires_at = created_at + timedelta(hours=settings.result_ttl_hours)
     task_fields = {
         "job_id": job_id,
+        "workflow_id": workflow_id,
         "status": "queued",
         "prompt": prompt,
         "negative_prompt": negative_prompt,
@@ -284,6 +307,8 @@ def submit(payload: SubmitRequest) -> dict[str, Any]:
             settings.jobs_dir / job_id,
             {
                 "job_id": job_id,
+                "workflow_id": workflow_id,
+                "workflow_name": entry.name,
                 "status": "queued",
                 "created_at": iso(created_at),
                 "expires_at": iso(expires_at),
@@ -299,7 +324,7 @@ def submit(payload: SubmitRequest) -> dict[str, Any]:
                 "lora_filename": payload.lora_filename,
                 "lora_strength": lora_strength,
                 "lora_disabled": payload.disable_lora,
-                "workflow_file": str(settings.workflow_file),
+                "workflow_file": str(entry.file),
                 "comfy_prompt_id": None,
                 "result_file": None,
                 "error": None,
@@ -309,8 +334,9 @@ def submit(payload: SubmitRequest) -> dict[str, Any]:
         logger.exception("could not write task metadata for job %s", job_id)
     runner.wake()
     logger.info(
-        "submit response job_id=%s prompt_chars=%s layout=%s",
+        "submit response job_id=%s workflow_id=%s prompt_chars=%s layout=%s",
         job_id,
+        workflow_id,
         len(prompt),
         layout_json is not None,
     )

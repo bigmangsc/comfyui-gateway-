@@ -15,7 +15,8 @@ from .config import Settings
 from .store import TaskStore, iso, parse_iso, utc_now
 from .task_metadata import update_task_metadata
 from .thumbnails import ensure_display, ensure_thumbnail
-from .workflow import WorkflowError, WorkflowTemplate
+from .workflow import WorkflowError
+from .workflows import WorkflowRegistry
 
 logger = logging.getLogger("comfy_gateway.runner")
 
@@ -43,12 +44,12 @@ class JobRunner:
         self,
         store: TaskStore,
         comfy: ComfyClient,
-        workflow: WorkflowTemplate,
+        workflows: WorkflowRegistry,
         settings: Settings,
     ):
         self.store = store
         self.comfy = comfy
-        self.workflow = workflow
+        self.workflows = workflows
         self.settings = settings
         self.jobs_dir = settings.jobs_dir
         self.jobs_dir.mkdir(parents=True, exist_ok=True)
@@ -143,8 +144,13 @@ class JobRunner:
 
     def _submit_task(self, task: dict[str, Any]) -> None:
         job_id = task["job_id"]
+        entry = self.workflows.get(task.get("workflow_id"))
+        if entry is None:
+            self._mark_failed(job_id, "工作流模板不可用，请检查 config/workflows.json 配置")
+            return
+        template = entry.template
         try:
-            built = self.workflow.build(
+            built = template.build(
                 task["prompt"],
                 filename_prefix=f"offline-job-{job_id}",
                 negative_prompt=task.get("negative_prompt"),

@@ -24,6 +24,11 @@
     <section class="panel form-panel">
       <form id="gen-form" autocomplete="off">
         <div class="field">
+          <label for="workflow-select">工作流</label>
+          <select id="workflow-select"></select>
+        </div>
+
+        <div class="field">
           <div class="field-head">
             <label for="prompt">提示词</label>
             <span class="hint"><a href="/download/image-prompt-skill.md" download>📄 提示词指南</a></span>
@@ -89,7 +94,7 @@
               </div>
             </div>
 
-            <details class="advanced">
+            <details class="advanced" id="layout-details">
               <summary>layout JSON（MOSS-Image 专家模式）</summary>
               <div class="field">
                 <textarea id="layout" rows="8" placeholder='填写 layout JSON 时请清空正向提示词，例如：

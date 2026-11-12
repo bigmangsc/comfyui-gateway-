@@ -57,6 +57,9 @@ class Settings:
     comfy_url: str = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
     # 路径
     workflow_file: Path = _env_path("WORKFLOW_FILE", PROJECT_ROOT / "config" / "workflow.json")
+    workflows_manifest: Path = _env_path(
+        "WORKFLOWS_MANIFEST", PROJECT_ROOT / "config" / "workflows.json"
+    )
     database_file: Path = _env_path("DATABASE_FILE", PROJECT_ROOT / "data" / "app.sqlite3")
     jobs_dir: Path = _env_path("JOBS_DIR", PROJECT_ROOT / "data" / "jobs")
     log_dir: Path = _env_path("LOG_DIR", PROJECT_ROOT / "data" / "logs")

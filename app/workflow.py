@@ -86,6 +86,16 @@ class WorkflowTemplate:
         name = inputs.get("lora_name")
         return str(name) if name else None
 
+    def has_lora_node(self) -> bool:
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        if not isinstance(data, dict):
+            return False
+        node_id, _ = self._find_lora_node(data)
+        return node_id is not None
+
     @staticmethod
     def _remove_lora_node(
         data: dict[str, Any],
@@ -197,7 +207,9 @@ class WorkflowTemplate:
             lora_inputs = lora_node.setdefault("inputs", {})
             if not isinstance(lora_inputs, dict):
                 raise WorkflowError("LoRA node has invalid inputs")
-            if disable_lora:
+            template_default = lora_inputs.get("lora_name")
+            # 未指定 LoRA 且模板默认名称为空时，视为本次不使用 LoRA
+            if disable_lora or (lora_filename is None and not template_default):
                 self._remove_lora_node(result, lora_id, lora_inputs)
             else:
                 if lora_filename is not None:

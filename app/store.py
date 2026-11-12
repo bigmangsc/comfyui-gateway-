@@ -8,6 +8,7 @@ from typing import Any
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS tasks (
     job_id TEXT PRIMARY KEY,
+    workflow_id TEXT,
     status TEXT NOT NULL,
     prompt TEXT NOT NULL DEFAULT '',
     negative_prompt TEXT,
@@ -37,6 +38,7 @@ CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks (created_at DESC);
 
 _TASK_FIELDS = (
     "job_id",
+    "workflow_id",
     "status",
     "prompt",
     "negative_prompt",
@@ -92,6 +94,14 @@ class TaskStore:
         with self._connect() as connection:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.executescript(_SCHEMA)
+            columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(tasks)").fetchall()
+            }
+            if "workflow_id" not in columns:
+                connection.execute(
+                    "ALTER TABLE tasks ADD COLUMN workflow_id TEXT"
+                )
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_file, timeout=30)

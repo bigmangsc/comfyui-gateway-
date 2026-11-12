@@ -12,7 +12,8 @@ const STATUS_LABELS = {
 };
 
 let tasks = [];
-let workflowInfo = null;
+let workflows = [];
+let currentWorkflowId = null;
 
 /* ---------- 表单 ---------- */
 
@@ -95,6 +96,7 @@ function collectForm() {
     const strength = parseFloat($("lora-strength").value);
     if (Number.isFinite(strength)) payload.lora_strength = strength;
   }
+  if (currentWorkflowId) payload.workflow_id = currentWorkflowId;
   return payload;
 }
 
@@ -173,22 +175,58 @@ async function refreshTasks() {
   }
 }
 
-function loadWorkflowInfo() {
-  fetch("/api/workflow/info")
+function loadWorkflows() {
+  fetch("/api/workflows")
     .then((response) => response.json())
     .then((data) => {
-      workflowInfo = data;
-      if (data.default_lora) {
-        $("lora-hint").textContent = "默认：" + data.default_lora;
-        $("lora-file").placeholder = data.default_lora;
-      } else {
-        $("lora-hint").textContent = "工作流中没有 LoRA 节点";
-        $("lora-file").disabled = true;
-        $("lora-strength").disabled = true;
+      workflows = data.items || [];
+      const select = $("workflow-select");
+      select.replaceChildren();
+      for (const workflow of workflows) {
+        const option = document.createElement("option");
+        option.value = workflow.id;
+        option.textContent = workflow.name;
+        select.appendChild(option);
       }
+      currentWorkflowId = data.default_id || (workflows[0] && workflows[0].id) || null;
+      if (currentWorkflowId) select.value = currentWorkflowId;
+      updateWorkflowUI();
     })
     .catch(() => {});
 }
+
+function currentWorkflow() {
+  return workflows.find((item) => item.id === currentWorkflowId) || null;
+}
+
+function updateWorkflowUI() {
+  const workflow = currentWorkflow();
+  if (!workflow) return;
+  // layout JSON 区域只对支持的工作流显示
+  const layoutDetails = document.getElementById("layout-details");
+  if (layoutDetails) layoutDetails.hidden = !workflow.supports_layout;
+  if (!workflow.supports_layout) {
+    $("layout").value = "";
+  }
+  // LoRA 提示与可用性
+  const hasLoraNode = workflow.has_lora_node;
+  if (workflow.default_lora) {
+    $("lora-hint").textContent = "默认：" + workflow.default_lora;
+    $("lora-file").placeholder = workflow.default_lora;
+  } else if (hasLoraNode) {
+    $("lora-hint").textContent = "填训练好的 LoRA 文件名；留空则本次不使用 LoRA";
+    $("lora-file").placeholder = "留空不使用 LoRA";
+  } else {
+    $("lora-hint").textContent = "此工作流没有 LoRA 节点";
+    $("lora-file").disabled = true;
+    $("lora-strength").disabled = true;
+  }
+}
+
+$("workflow-select").addEventListener("change", () => {
+  currentWorkflowId = $("workflow-select").value;
+  updateWorkflowUI();
+});
 
 /* ---------- 渲染 ---------- */
 
@@ -250,6 +288,7 @@ function taskCard(task) {
   body.appendChild(promptEl);
 
   const infoParts = [];
+  if (task.workflow_name) infoParts.push(task.workflow_name);
   if (task.width && task.height) infoParts.push(`${task.width}×${task.height}`);
   if (task.steps) infoParts.push(`steps ${task.steps}`);
   if (task.seed != null) infoParts.push(`seed ${task.seed}`);
@@ -358,6 +397,11 @@ function deleteTask(jobId) {
 }
 
 function copyParams(task) {
+  if (task.workflow_id && workflows.some((item) => item.id === task.workflow_id)) {
+    $("workflow-select").value = task.workflow_id;
+    currentWorkflowId = task.workflow_id;
+    updateWorkflowUI();
+  }
   $("prompt").value = task.prompt || "";
   $("prompt-count").textContent = $("prompt").value.length;
   $("layout").value = task.layout_json ? JSON.stringify(JSON.parse(task.layout_json), null, 2) : "";
@@ -421,7 +465,7 @@ $("refresh-btn").addEventListener("click", () => {
   refreshComfyStatus();
 });
 
-loadWorkflowInfo();
+loadWorkflows();
 refreshTasks();
 refreshComfyStatus();
 setInterval(() => {
