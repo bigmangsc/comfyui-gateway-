@@ -60,6 +60,9 @@ class Settings:
     workflows_manifest: Path = _env_path(
         "WORKFLOWS_MANIFEST", PROJECT_ROOT / "config" / "workflows.json"
     )
+    lora_presets_file: Path = _env_path(
+        "LORA_PRESETS_FILE", PROJECT_ROOT / "config" / "lora_presets.json"
+    )
     database_file: Path = _env_path("DATABASE_FILE", PROJECT_ROOT / "data" / "app.sqlite3")
     jobs_dir: Path = _env_path("JOBS_DIR", PROJECT_ROOT / "data" / "jobs")
     log_dir: Path = _env_path("LOG_DIR", PROJECT_ROOT / "data" / "logs")

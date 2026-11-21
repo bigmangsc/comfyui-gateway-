@@ -77,21 +77,14 @@
 
             <div class="field">
               <div class="field-head">
-                <label for="lora-file">LoRA 文件名</label>
+                <label for="lora-select">LoRA</label>
                 <span class="hint" id="lora-hint"></span>
               </div>
-              <input type="text" id="lora-file" maxlength="300" placeholder="留空使用工作流默认 LoRA">
+              <select id="lora-select"></select>
             </div>
-            <div class="grid-2">
-              <div class="field">
-                <label for="lora-strength">LoRA 强度 (0–2)</label>
-                <input type="number" id="lora-strength" min="0" max="2" step="0.01" value="1">
-              </div>
-              <div class="field check-field">
-                <label class="checkbox-label">
-                  <input type="checkbox" id="disable-lora"> 本次禁用 LoRA
-                </label>
-              </div>
+            <div class="field">
+              <label for="lora-strength">LoRA 强度 (0–2)</label>
+              <input type="number" id="lora-strength" min="0" max="2" step="0.01" value="1">
             </div>
 
             <details class="advanced" id="layout-details">

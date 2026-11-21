@@ -1,0 +1,49 @@
+{
+  "kao.safetensors": {
+    "name": "KAO（金发异色瞳角娘）",
+    "workflows": ["sdxl_anime"],
+    "trigger": "kao",
+    "prompt": "kao, 1girl, horns, golden hair, red left eye, yellow right eye, portrait, upper body, looking at viewer, masterpiece, best quality",
+    "strength": 1.0
+  },
+  "bls.safetensors": {
+    "name": "BLS（兽耳白发）",
+    "workflows": ["sdxl_anime"],
+    "trigger": "bls",
+    "prompt": "bls, 1girl, animal ears, multicolored hair, tail, solo, portrait, upper body, looking at viewer, masterpiece, best quality",
+    "strength": 1.0
+  },
+  "crl.safetensors": {
+    "name": "CRL（真人角色）",
+    "workflows": ["sdxl_real"],
+    "trigger": "crl",
+    "prompt": "crl, photorealistic portrait of a person, upper body, looking at camera, natural light",
+    "strength": 1.0
+  },
+  "kaoyuzi_v2.safetensors": {
+    "name": "Kaoyuzi（MOSS 角色）",
+    "workflows": ["moss_t2i"],
+    "trigger": "kaoyuzi",
+    "prompt": "kaoyuzi, 1girl, solo, portrait, upper body, looking at viewer",
+    "strength": 1.0
+  },
+  "baki.safetensors": {
+    "name": "Baki（MOSS 角色）",
+    "workflows": ["moss_t2i"],
+    "trigger": "baki",
+    "prompt": "baki, solo, portrait, upper body, looking at viewer",
+    "strength": 1.0
+  },
+  "moss_image_edit_lora_rank_64_bf16.safetensors": {
+    "name": "MOSS 编辑 LoRA",
+    "workflows": ["moss_t2i"],
+    "trigger": "",
+    "strength": 1.0
+  },
+  "moss_image_color_depth_control.safetensors": {
+    "name": "MOSS 色彩/深度控制",
+    "workflows": ["moss_t2i"],
+    "trigger": "",
+    "strength": 1.0
+  }
+}

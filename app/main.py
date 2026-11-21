@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import logging
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import timedelta
@@ -56,6 +58,19 @@ workflows = WorkflowRegistry(settings)
 _default_entry = workflows.default_entry()
 DEFAULT_LORA = _default_entry.default_lora if _default_entry else None
 runner = JobRunner(store, comfy, workflows, settings)
+
+# LoRA 预设（文件名 -> 默认提示词/强度/兼容工作流）
+LORA_PRESETS: dict[str, Any] = {}
+try:
+    if settings.lora_presets_file.is_file():
+        _loaded = json.loads(settings.lora_presets_file.read_text(encoding="utf-8"))
+        if isinstance(_loaded, dict):
+            LORA_PRESETS = _loaded
+except (OSError, json.JSONDecodeError) as exc:
+    logger.error("could not load lora presets: %s", exc)
+
+# ComfyUI LoRA 列表缓存
+_loras_cache: dict[str, Any] = {"at": 0.0, "names": []}
 
 
 # ---------- 请求模型 ----------
@@ -201,6 +216,34 @@ def workflows_list() -> dict[str, Any]:
         "items": workflows.list_public(),
         "default_id": workflows.default_id,
     }
+
+
+@app.get("/api/loras")
+def loras_list() -> dict[str, Any]:
+    now = time.monotonic()
+    if now - _loras_cache["at"] > 60.0:
+        try:
+            info = comfy._request("/object_info", timeout=30)
+            names = info["LoraLoader"]["input"]["required"]["lora_name"][0]
+            _loras_cache["names"] = [str(n) for n in names]
+            _loras_cache["at"] = now
+        except Exception as exc:
+            logger.warning("could not refresh lora list from ComfyUI: %s", exc)
+    items: list[dict[str, Any]] = []
+    for filename in _loras_cache["names"]:
+        preset = LORA_PRESETS.get(filename) or {}
+        items.append(
+            {
+                "filename": filename,
+                "name": preset.get("name") or filename,
+                "trigger": preset.get("trigger") or "",
+                "prompt": preset.get("prompt") or "",
+                "strength": preset.get("strength", 1.0),
+                "workflows": preset.get("workflows") or [],
+                "has_preset": bool(preset),
+            }
+        )
+    return {"items": items, "total": len(items)}
 
 
 @app.get("/api/workflow/info")

@@ -14,6 +14,7 @@ const STATUS_LABELS = {
 let tasks = [];
 let workflows = [];
 let currentWorkflowId = null;
+let lorasData = [];
 
 /* ---------- 表单 ---------- */
 
@@ -30,10 +31,31 @@ $("size-preset").addEventListener("change", () => {
   }
 });
 
-$("disable-lora").addEventListener("change", () => {
-  const disabled = $("disable-lora").checked;
-  $("lora-file").disabled = disabled;
-  $("lora-strength").disabled = disabled;
+function selectedLoraItem() {
+  const value = $("lora-select").value;
+  if (!value || value === "__default__") return null;
+  return lorasData.find((item) => item.filename === value) || null;
+}
+
+$("lora-select").addEventListener("change", () => {
+  const item = selectedLoraItem();
+  if (item) {
+    if (item.prompt) {
+      $("prompt").value = item.prompt;
+      $("prompt-count").textContent = item.prompt.length;
+    }
+    if (item.strength != null) {
+      $("lora-strength").value = item.strength;
+    }
+    $("lora-hint").textContent = item.trigger ? "触发词：" + item.trigger : "";
+  } else {
+    const workflow = currentWorkflow();
+    if ($("lora-select").value === "__default__" && workflow && workflow.default_lora) {
+      $("lora-hint").textContent = "默认：" + workflow.default_lora;
+    } else {
+      $("lora-hint").textContent = "";
+    }
+  }
 });
 
 function showError(message) {
@@ -89,10 +111,11 @@ function collectForm() {
     }
   }
 
-  payload.disable_lora = $("disable-lora").checked;
-  if (!payload.disable_lora) {
-    const loraFile = $("lora-file").value.trim();
-    if (loraFile) payload.lora_filename = loraFile;
+  const loraChoice = $("lora-select").value;
+  if (loraChoice === "") {
+    payload.disable_lora = true;
+  } else if (loraChoice !== "__default__") {
+    payload.lora_filename = loraChoice;
     const strength = parseFloat($("lora-strength").value);
     if (Number.isFinite(strength)) payload.lora_strength = strength;
   }
@@ -191,12 +214,65 @@ function loadWorkflows() {
       currentWorkflowId = data.default_id || (workflows[0] && workflows[0].id) || null;
       if (currentWorkflowId) select.value = currentWorkflowId;
       updateWorkflowUI();
+      loadLoras();
     })
     .catch(() => {});
 }
 
 function currentWorkflow() {
   return workflows.find((item) => item.id === currentWorkflowId) || null;
+}
+
+function loadLoras() {
+  fetch("/api/loras")
+    .then((response) => response.json())
+    .then((data) => {
+      lorasData = data.items || [];
+      rebuildLoraSelect();
+    })
+    .catch(() => {});
+}
+
+function rebuildLoraSelect() {
+  const workflow = currentWorkflow();
+  const select = $("lora-select");
+  const previous = select.value;
+  select.replaceChildren();
+
+  const noneOption = document.createElement("option");
+  noneOption.value = "";
+  noneOption.textContent = "不使用 LoRA";
+  select.appendChild(noneOption);
+
+  if (workflow && workflow.has_lora) {
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "__default__";
+    defaultOption.textContent = workflow.default_lora
+      ? "工作流默认（" + workflow.default_lora + "）"
+      : "工作流默认";
+    select.appendChild(defaultOption);
+  }
+
+  for (const item of lorasData) {
+    if (item.workflows.length && workflow && !item.workflows.includes(workflow.id)) {
+      continue; // 该 LoRA 不兼容当前工作流
+    }
+    const option = document.createElement("option");
+    option.value = item.filename;
+    option.textContent = item.has_preset
+      ? item.name + (item.trigger ? "（触发词 " + item.trigger + "）" : "")
+      : item.filename;
+    select.appendChild(option);
+  }
+
+  if (previous && select.querySelector(`option[value="${CSS.escape(previous)}"]`)) {
+    select.value = previous;
+  } else if (workflow && workflow.has_lora) {
+    select.value = "__default__";
+  } else {
+    select.value = "";
+  }
+  select.dispatchEvent(new Event("change"));
 }
 
 function updateWorkflowUI() {
@@ -208,18 +284,15 @@ function updateWorkflowUI() {
   if (!workflow.supports_layout) {
     $("layout").value = "";
   }
-  // LoRA 提示与可用性
-  const hasLoraNode = workflow.has_lora_node;
-  if (workflow.default_lora) {
-    $("lora-hint").textContent = "默认：" + workflow.default_lora;
-    $("lora-file").placeholder = workflow.default_lora;
-  } else if (hasLoraNode) {
-    $("lora-hint").textContent = "填训练好的 LoRA 文件名；留空则本次不使用 LoRA";
-    $("lora-file").placeholder = "留空不使用 LoRA";
-  } else {
-    $("lora-hint").textContent = "此工作流没有 LoRA 节点";
-    $("lora-file").disabled = true;
+  // LoRA 下拉框随工作流重建
+  rebuildLoraSelect();
+  if (!workflow.has_lora_node) {
+    $("lora-select").disabled = true;
     $("lora-strength").disabled = true;
+    $("lora-hint").textContent = "此工作流没有 LoRA 节点";
+  } else {
+    $("lora-select").disabled = false;
+    $("lora-strength").disabled = false;
   }
 }
 
@@ -419,9 +492,18 @@ function copyParams(task) {
     $("width").value = task.width;
     $("height").value = task.height;
   }
-  $("disable-lora").checked = Boolean(task.lora_disabled);
-  $("disable-lora").dispatchEvent(new Event("change"));
-  if (task.lora_filename) $("lora-file").value = task.lora_filename;
+  const loraSelect = $("lora-select");
+  if (task.lora_disabled) {
+    loraSelect.value = "";
+  } else if (task.lora_filename) {
+    loraSelect.value = task.lora_filename;
+  } else {
+    loraSelect.value = "__default__";
+  }
+  // 不触发 change 事件，避免 LoRA 预设覆盖复制过来的提示词
+  const loraItem = selectedLoraItem();
+  $("lora-hint").textContent =
+    loraItem && loraItem.trigger ? "触发词：" + loraItem.trigger : "";
   if (task.lora_strength != null) $("lora-strength").value = task.lora_strength;
   $("advanced-panel").open = true;
   window.scrollTo({ top: 0, behavior: "smooth" });
